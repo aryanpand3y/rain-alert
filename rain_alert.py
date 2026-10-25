@@ -3,7 +3,9 @@ Rain alert for clothes drying on the terrace, with a "clothes out" switch.
 
 Alerts your phone via ntfy ONLY when you've marked your clothes as "out", and:
   - rain is likely in the next ~30-45 minutes  -> "Rain coming soon" (early warning)
-  - any rain or drizzle is falling right now     -> "It's raining now"
+  - rain right now                             -> "It's raining now"
+  - moderate/dense drizzle right now           -> "Drizzle likely now"
+Light drizzle (weather code 51, ~0.1 mm) is ignored: it caused false alarms.
 
 Each run checks several times, a few minutes apart, because GitHub only starts
 scheduled runs roughly every 30 minutes even when asked for every 10.
@@ -32,15 +34,18 @@ INTERVAL = int(os.environ.get("INTERVAL", "270"))
 
 STATE_FILE = "state.json"
 
-# Any measurable rain counts: wet clothes are wet clothes.
-RAIN_NOW_MM = 0.1
+# 0.2 mm in 15 min: real drizzle tonight showed 0.2 mm; the false alarms
+# from "light drizzle" showed only 0.1 mm.
+RAIN_NOW_MM = 0.2
 # Early warning: this much rain forecast in one of the next 15-minute slots...
 SOON_MM = 0.2
 # ...or this chance of rain in the coming hour.
 SOON_PROBABILITY = 70
 
-# WMO weather codes: drizzle (51-57), rain (61-67), showers (80-82), thunderstorms (95-99)
-RAIN_CODES = set(range(51, 58)) | set(range(61, 68)) | {80, 81, 82, 95, 96, 99}
+# WMO weather codes: moderate/dense drizzle (53-57), rain (61-67), showers (80-82),
+# thunderstorms (95-99). Light drizzle (51) is ignored: it caused false alarms.
+DRIZZLE_CODES = set(range(53, 58))
+RAIN_CODES = DRIZZLE_CODES | set(range(61, 68)) | {80, 81, 82, 95, 96, 99}
 
 
 def get_json(url):
@@ -172,7 +177,11 @@ def check_once(state):
     if raining_now:
         state["rain"] = "raining"
         if clothes_out and not state["alerted"]:
-            notify("It's raining now", "Rain or drizzle at your place and your clothes are out. Get them in!")
+            cur_code = (data.get("current") or {}).get("weather_code")
+            if cur_code in DRIZZLE_CODES:
+                notify("Drizzle likely now", "Weather data shows drizzle at your place and your clothes are out. Worth a quick look.")
+            else:
+                notify("It's raining now", "Rain at your place and your clothes are out. Get them in!")
             state["alerted"] = True
             state["warned"] = True
     elif rain_soon:
