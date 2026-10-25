@@ -15,12 +15,12 @@ LON = os.environ["LON"]
 TOPIC = os.environ["NTFY_TOPIC"]
 
 STATE_FILE = "state.json"
-RAIN_NOW_MM = 0.1      # mm in the current period that counts as "raining"
-RAIN_SOON_MM = 0.2     # mm in a 15-min slot that counts as "rain coming"
+RAIN_NOW_MM = 0.5      # mm in the current period that counts as "raining"
+RAIN_SOON_MM = 0.5     # mm in a 15-min slot that counts as "rain coming"
 LOOKAHEAD_SLOTS = 3    # 3 x 15 min = next ~45 minutes
 
 # WMO weather codes that mean rain/drizzle/showers/thunderstorm
-RAIN_CODES = set(range(51, 68)) | {80, 81, 82, 95, 96, 99}
+RAIN_CODES = set(range(61, 68)) | {80, 81, 82, 95, 96, 99}
 
 
 def get_weather():
