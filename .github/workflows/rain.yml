@@ -2,31 +2,38 @@ name: Rain alert
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # every 10 minutes
+    - cron: "*/10 * * * *"   # GitHub actually starts these about every 30 min
   workflow_dispatch:          # lets you run it manually to test
 
 permissions:
   contents: write
 
+# One run at a time; a new one waits for the current one to finish
+concurrency:
+  group: rain-alert
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check for rain
+      - name: Check for rain (6 checks, about 4.5 min apart)
         run: python rain_alert.py
         env:
           LAT: ${{ secrets.LAT }}
           LON: ${{ secrets.LON }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
 
-      - name: Save state (so you get one alert per rain, not every 10 min)
+      - name: Save state (so you get one alert per rain, not every check)
         run: |
           if [ -n "$(git status --porcelain state.json)" ]; then
             git config user.name "rain-bot"
             git config user.email "rain-bot@users.noreply.github.com"
             git add state.json
             git commit -m "update rain state"
+            git pull --rebase -X theirs || true
             git push
           fi
