@@ -1,7 +1,7 @@
 {
- "alerted": true,
+ "alerted": false,
  "clothes": "out",
  "clothes_time": 1792936904,
- "rain": "raining",
- "warned": true
+ "rain": "dry",
+ "warned": false
 }
