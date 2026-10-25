@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check for rain (6 checks, about 4.5 min apart)
-        run: python rain_alert.py
+        run: python -u rain_alert.py   # -u shows each check in the log as it happens
         env:
           LAT: ${{ secrets.LAT }}
           LON: ${{ secrets.LON }}
