@@ -1,10 +1,10 @@
 """
-Minimal rain alert: checks Open-Meteo for your location and pushes a
-notification to your phone via ntfy when rain is about to start or has started.
+Strict rain alert: pushes a notification to your phone via ntfy ONLY when
+proper rain (not drizzle) is falling at your location right now.
 
 Needs 3 environment variables (set as GitHub secrets):
-  LAT, LON     - your building's coordinates (e.g. 12.9716, 77.5946)
-  NTFY_TOPIC   - your private ntfy topic name (e.g. aryan-terrace-rain-8273)
+  LAT, LON     - your building's coordinates
+  NTFY_TOPIC   - your private ntfy topic name
 """
 import json
 import os
@@ -15,11 +15,11 @@ LON = os.environ["LON"]
 TOPIC = os.environ["NTFY_TOPIC"]
 
 STATE_FILE = "state.json"
-RAIN_NOW_MM = 0.5      # mm in the current period that counts as "raining"
-RAIN_SOON_MM = 0.5     # mm in a 15-min slot that counts as "rain coming"
-LOOKAHEAD_SLOTS = 3    # 3 x 15 min = next ~45 minutes
 
-# WMO weather codes that mean rain/drizzle/showers/thunderstorm
+# Strict: ~1 mm in 15 min (about 4 mm/hour) = clearly noticeable rain.
+RAIN_NOW_MM = 1.0
+
+# WMO weather codes for real rain / showers / thunderstorms (drizzle excluded)
 RAIN_CODES = set(range(61, 68)) | {80, 81, 82, 95, 96, 99}
 
 
@@ -27,20 +27,18 @@ def get_weather():
     url = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={LAT}&longitude={LON}"
-        "&current=precipitation,rain,weather_code"
-        "&minutely_15=precipitation"
-        f"&forecast_minutely_15={LOOKAHEAD_SLOTS}"
+        "&current=precipitation,rain,showers,weather_code"
         "&timezone=Asia%2FKolkata"
     )
     with urllib.request.urlopen(url, timeout=20) as r:
         return json.load(r)
 
 
-def notify(title, message, priority="high"):
+def notify(title, message):
     req = urllib.request.Request(
         f"https://ntfy.sh/{TOPIC}",
         data=message.encode("utf-8"),
-        headers={"Title": title, "Priority": priority, "Tags": "umbrella"},
+        headers={"Title": title, "Priority": "urgent", "Tags": "umbrella"},
         method="POST",
     )
     urllib.request.urlopen(req, timeout=20)
@@ -67,28 +65,21 @@ def main():
         return
 
     cur = data.get("current", {})
-    raining_now = (
-        (cur.get("precipitation") or 0) >= RAIN_NOW_MM
-        or (cur.get("rain") or 0) >= RAIN_NOW_MM
-        or cur.get("weather_code") in RAIN_CODES
+    amount = max(
+        cur.get("precipitation") or 0,
+        (cur.get("rain") or 0) + (cur.get("showers") or 0),
     )
-    upcoming = data.get("minutely_15", {}).get("precipitation", []) or []
-    rain_soon = any((p or 0) >= RAIN_SOON_MM for p in upcoming)
+    code = cur.get("weather_code")
+
+    # BOTH must be true: real rain type AND a heavy-enough amount.
+    raining_now = code in RAIN_CODES and amount >= RAIN_NOW_MM
 
     prev = load_state()
+    if raining_now and prev != "raining":
+        notify("It's raining now", "Proper rain has started at your place. Get the clothes in!")
+    new = "raining" if raining_now else "dry"
 
-    if raining_now:
-        if prev != "raining":
-            notify("It's raining now", "Rain has started at your place. Get the clothes in!", "urgent")
-        new = "raining"
-    elif rain_soon:
-        if prev == "dry":
-            notify("Rain coming soon", "Rain likely in the next 30-45 minutes. Good time to grab the clothes.")
-        new = "raining" if prev == "raining" else "soon"
-    else:
-        new = "dry"
-
-    print(f"now={raining_now} soon={rain_soon} state: {prev} -> {new}")
+    print(f"code={code} amount={amount}mm raining={raining_now} state: {prev} -> {new}")
     if new != prev:
         save_state(new)
 
